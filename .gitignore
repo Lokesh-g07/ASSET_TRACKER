@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Secrets and Environment Configs
+secrets/
+firebase-adminsdk.json
+*.env
+
+__pycache__/

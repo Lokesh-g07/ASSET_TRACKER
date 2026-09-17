@@ -12,13 +12,15 @@ Campus Asset Tracker addresses the problem of physical asset loss, misuse, and u
 
 ## Current Implementation Status
 
-> **Stage 1 — Dashboard layer only.**
+> **Stage 5 — Docker Integration Complete.**
 >
-> The current repository contains the **React/Firebase web dashboard** only.
+> The project currently contains:
+> 1. **React/Firebase Web Dashboard**
+> 2. **Python IoT Simulator** (Generates BLE/GPS telemetry with battery drain)
+> 3. **Mosquitto MQTT Broker** (Containerized)
+> 4. **FastAPI Hub** (Ingests MQTT telemetry and writes to Firebase)
 >
-> The hardware layer (BLE, ESP32, LoRa), the Raspberry Pi hub, the MQTT broker, and the FastAPI ingestion service have **not yet been implemented**.
->
-> All asset, gateway, and alert data shown in the dashboard is currently **static mock data** defined inline in the React hooks. No live IoT data flows into the system at this stage.
+> The entire backend pipeline is containerized using Docker Compose. The hardware layer (ESP32, LoRa) and the physical Raspberry Pi deployment are pending Stage 6.
 
 ---
 
@@ -226,11 +228,11 @@ The same pattern applies to `useGateways(false)` and `useAlerts(false)`.
 | Stage   | Description                                          | Status      |
 |---------|------------------------------------------------------|-------------|
 | Stage 1 | React/Firebase dashboard — inspection & stabilisation | ✅ Complete |
-| Stage 2 | Python simulator producing Firebase-compatible data   | 🔜 Planned  |
-| Stage 3 | FastAPI + MQTT ingestion service                      | 🔜 Planned  |
-| Stage 4 | ESP32 gateway firmware                                | 🔜 Planned  |
-| Stage 5 | Raspberry Pi LoRa hub                                 | 🔜 Planned  |
-| Stage 6 | Full end-to-end BLE → dashboard integration           | 🔜 Planned  |
+| Stage 2 | Python simulator producing simulated IoT telemetry    | ✅ Complete |
+| Stage 3 | Simulator → Mosquitto MQTT adapter                    | ✅ Complete |
+| Stage 4 | FastAPI ingestion service mapping MQTT to Firebase    | ✅ Complete |
+| Stage 5 | Local integration & Docker Compose stack             | ✅ Complete |
+| Stage 6 | Hardware layer (ESP32 BLE scanning, LoRa)             | 🔜 Planned  |
 
 ---
 
@@ -242,4 +244,68 @@ The same pattern applies to `useGateways(false)` and `useAlerts(false)`.
 - **Heatmap and Floorplan views are stubs.** Only the "Map" tile layer is rendered.
 - **No route protection.** The `ProtectedLayout` does not redirect unauthenticated users to `/login`. Auth guard will need to be added before any production deployment.
 - **No geofence schema in Firebase.** This must be designed and agreed before Stage 3.
-- **`recharts` is installed but unused.** Reserved for future analytics/reporting charts.
+- `recharts` is installed but unused. Reserved for future analytics/reporting charts.
+
+## Stage 5: Docker Compose Integration
+
+The full backend architecture (Simulator + Mosquitto + FastAPI Hub) is containerized via Docker Compose.
+
+### Prerequisites
+- [Docker](https://docs.docker.com/get-docker/) & Docker Compose
+- Node.js (for the React Dashboard)
+
+### Firebase Credential Setup
+1. Download your Firebase Service Account JSON file.
+2. Save it as `firebase-adminsdk.json` in the `secrets/` directory:
+   ```text
+   ASSET_TRACKER/
+   └── secrets/
+       └── firebase-adminsdk.json
+   ```
+*(Note: `secrets/` is ignored by Git, so your credentials remain safe).*
+
+### Environment Variables
+A `.env` file in the root can override defaults if needed:
+- `VITE_FIREBASE_DATABASE_URL=https://your-project-default-rtdb.firebaseio.com`
+
+### Running the Stack
+Start the backend services:
+```bash
+docker compose up -d
+```
+
+### Checking Hub Health
+```bash
+curl http://localhost:8000/health
+# Expected: {"status":"ok","mqtt":"connected","firebase":"initialized"}
+```
+
+### Viewing Logs & MQTT Messages
+View logs of all services:
+```bash
+docker compose logs -f
+```
+To observe live MQTT telemetry:
+```bash
+docker compose exec mosquitto mosquitto_sub -t "asset/+/telemetry" -v
+```
+
+### Running the React Dashboard
+The frontend remains running on the host machine:
+```bash
+npm install
+npm run dev
+```
+Navigate to `http://localhost:5173`. Ensure `useMock=false` in the React hooks to consume live Firebase data.
+
+### Running Container Tests
+You can run the unit tests inside the pristine container environments:
+```bash
+docker compose run --rm hub pytest tests/
+docker compose run --rm simulator pytest tests/
+```
+
+### Stopping the Stack
+```bash
+docker compose down
+```
