@@ -10,7 +10,29 @@ In the full architecture, BLE tags attached to assets broadcast signals that are
 
 This Python simulator replicates that physical layer (Stage 2). It runs independently, managing virtual assets, calculating simulated BLE RSSI (signal strength), and determining gateway associations as assets move around virtual waypoints.
 
-Currently, it outputs a normalized internal telemetry model to the terminal. In future stages (Stage 3), this telemetry will be published directly to an MQTT broker.
+## Architecture
+
+```text
+┌────────────────────┐
+│ Python Simulator   │
+│                    │
+│ Movement           │
+│ BLE/RSSI           │
+│ Battery            │
+└─────────┬──────────┘
+          │
+          │ MQTT (asset/{id}/telemetry)
+          ↓
+┌────────────────────┐
+│ Mosquitto Broker   │
+└─────────┬──────────┘
+          │
+          ↓
+   Future Stage 4
+   FastAPI Hub
+```
+
+> **Note:** The FastAPI Hub is **not implemented yet**. The simulator currently publishes telemetry to the MQTT broker, where it waits for future stages.
 
 ## How to Install
 
@@ -42,6 +64,10 @@ You will see a live-updating table in your terminal showing all assets, their cu
 ## Configuration
 
 All configuration is located in `config.py`. You can change:
+- `MQTT_ENABLED`: Set to `True` (or environment variable `MQTT_ENABLED=true`) to publish to Mosquitto. Defaults to `False`.
+- `MQTT_HOST`: Defaults to `localhost`.
+- `MQTT_PORT`: Defaults to `1883`.
+- `MQTT_QOS`: Defaults to `1` (At least once delivery). `retain` is hardcoded to `False` as telemetry is a stream.
 - `SIMULATION_INTERVAL_SEC`: How often the simulation loop updates (seconds).
 - `MOVEMENT_SPEED_MPS`: How fast assets move between waypoints (meters per second).
 - `BATTERY_DRAIN_PER_TICK`: How much battery drains every interval.
@@ -80,7 +106,23 @@ Basic mathematical and logic tests are provided via `pytest`.
 pytest tests/
 ```
 
+## MQTT Testing
+
+To verify the MQTT transport:
+1. Ensure Mosquitto is running locally (e.g., via Docker: `docker run -it -p 1883:1883 eclipse-mosquitto`).
+2. Run the simulator with MQTT enabled:
+   ```bash
+   # On Windows PowerShell
+   $env:MQTT_ENABLED="true"; python main.py
+   ```
+3. Subscribe to the topics in another terminal:
+   ```bash
+   mosquitto_sub -h localhost -t "asset/+/telemetry" -v
+   ```
+   You should see JSON payloads arriving every tick.
+
+If the Mosquitto broker is unavailable, the simulator will log the status in the UI but will **not crash**. It will gracefully continue simulating movement while silently failing to publish.
+
 ## Current Limitations
 - Geofence breach logic is not currently implemented. Assets will always report `online` or `idle` (if battery dies).
 - The "Campus Bounds" are currently a simple bounding box without true geographical terrain awareness.
-- Telemetry is currently only printed to the terminal, awaiting MQTT integration in Stage 3.

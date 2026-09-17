@@ -9,6 +9,7 @@ import config
 from models import Asset, Gateway, Location, Telemetry
 from movement import update_asset
 from ble import generate_telemetry
+from mqtt_client import MqttPublisher
 
 def generate_random_location() -> Location:
     lat = random.uniform(config.CAMPUS_BOUNDS["min_lat"], config.CAMPUS_BOUNDS["max_lat"])
@@ -49,9 +50,10 @@ def init_assets() -> List[Asset]:
         assets.append(asset)
     return assets
 
-def generate_table(telemetry_list: List[Telemetry]) -> Table:
+def generate_table(telemetry_list: List[Telemetry], mqtt_status: str) -> Table:
     """Generate a rich table for terminal output."""
-    table = Table(title="Campus Asset Tracker - Simulated IoT Environment", show_header=True, header_style="bold magenta")
+    title = f"Campus Asset Tracker - Simulated IoT Environment (MQTT: {mqtt_status})"
+    table = Table(title=title, show_header=True, header_style="bold magenta")
     
     table.add_column("Asset ID", style="cyan", width=10)
     table.add_column("Category", width=15)
@@ -84,6 +86,8 @@ async def main():
     console = Console()
     console.print("[bold green]Starting Simulator...[/bold green]")
     
+    mqtt_publisher = MqttPublisher()
+    
     gateways = init_gateways()
     assets = init_assets()
     
@@ -100,8 +104,11 @@ async def main():
                     telemetry = generate_telemetry(asset, gateways)
                     telemetry_data.append(telemetry)
                 
+                # Publish to MQTT
+                mqtt_publisher.publish(telemetry_data)
+                
                 # Update terminal UI
-                table = generate_table(telemetry_data)
+                table = generate_table(telemetry_data, mqtt_publisher.get_status_string())
                 live.update(table)
                 
                 # Wait for next tick
@@ -109,6 +116,8 @@ async def main():
                 
     except KeyboardInterrupt:
         console.print("[bold red]Simulator stopped.[/bold red]")
+    finally:
+        mqtt_publisher.stop()
 
 if __name__ == "__main__":
     asyncio.run(main())

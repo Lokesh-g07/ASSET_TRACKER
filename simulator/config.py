@@ -8,6 +8,13 @@ MOVEMENT_SPEED_MPS = 1.5       # Meters per second (approx walking speed)
 BATTERY_DRAIN_PER_TICK = 0.05  # Percentage of battery drained per tick
 RANDOM_SEED = 42               # Set for deterministic tests, or None for random
 
+# MQTT Configuration
+import os
+MQTT_ENABLED = os.getenv("MQTT_ENABLED", "false").lower() == "true"
+MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_QOS = int(os.getenv("MQTT_QOS", "1"))
+
 # Geographic bounds for the campus simulation (approx 11.016 N, 76.955 E)
 CAMPUS_BOUNDS = {
     "min_lat": 11.0150,
