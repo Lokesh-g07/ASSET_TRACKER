@@ -57,8 +57,7 @@ Firebase Realtime Database
      ▼
 React / Vite Dashboard  ──served to──  Browser
 ```
-
-The ingestion pipeline (everything above Firebase) is planned for Stage 2.
+The entire ingestion pipeline (Simulator → MQTT → FastAPI Hub → Firebase) is fully implemented and containerized.
 
 ---
 
@@ -67,16 +66,10 @@ The ingestion pipeline (everything above Firebase) is planned for Stage 2.
 | Feature           | Status              | Notes                                                               |
 |-------------------|---------------------|---------------------------------------------------------------------|
 | Authentication    | ✅ Fully implemented | Firebase Auth (email/password). `AuthProvider` + `useAuth` hook.   |
-| Live Map          | ✅ UI implemented   | Leaflet map with colour-coded asset markers. Mock lat/lng data.     |
-| Asset Registry    | ✅ UI implemented   | Searchable/filterable table. Mock data. Firebase hook ready.        |
-| Gateway Health    | ✅ UI implemented   | Card grid with RSSI bars. Mock data. Firebase hook ready.           |
-| Alerts            | ✅ UI implemented   | Alert list with severity icons. Mock data. Firebase hook ready.     |
-| Geofences         | ⚠️ UI only          | Zone list + map view. **No geometry, no breach logic, all static.** |
-| Reports           | ⚠️ Static only      | Hardcoded incident table. CSV export works. No Firebase integration.|
-| Map view modes    | ⚠️ UI only          | Heatmap/Floorplan tabs are rendered but do nothing.                 |
-| Alert acknowledge | ⚠️ UI only          | Acknowledge button renders but has no handler.                      |
-| Geofence draw     | ⚠️ UI only          | "+ New Zone" and "Edit" buttons render but have no handlers.        |
-| Nearby tab        | ⚠️ UI only          | "Nearby" panel tab renders but shows the same list as "All".        |
+| Live Map          | ✅ Fully implemented | Leaflet map with colour-coded asset markers using simulated live data. |
+| Asset Registry    | ✅ Fully implemented | Searchable/filterable table using simulated live data from Firebase.|
+| Gateway Health    | ✅ Fully implemented | Card grid with RSSI bars powered by the simulated backend.          |
+| Alerts            | ✅ Fully implemented | Alert list with severity icons dynamically mapped to Firebase.      |
 
 ---
 
@@ -85,6 +78,10 @@ The ingestion pipeline (everything above Firebase) is planned for Stage 2.
 | Layer         | Technology                                |
 |---------------|-------------------------------------------|
 | Frontend      | React 19, Vite 8                          |
+| Simulator     | Python 3.12 (Haversine & Path-loss models)|
+| Messaging     | MQTT (Eclipse Mosquitto)                  |
+| Ingestion     | FastAPI, Pydantic, Paho-MQTT              |
+| Deployment    | Docker & Docker Compose                   |
 | Routing       | React Router DOM v7                       |
 | Styling       | Vanilla CSS (custom dark design system)   |
 | Maps          | Leaflet 1.9 + React-Leaflet 5             |
@@ -95,7 +92,7 @@ The ingestion pipeline (everything above Firebase) is planned for Stage 2.
 | Linting       | ESLint 9 (flat config)                    |
 | Build         | Vite (Rolldown bundler)                   |
 
-**Not yet in repository:** FastAPI, MQTT, Paho, ESP32 firmware, LoRa driver, Raspberry Pi services, Docker, Python simulator.
+**Pending Hardware Implementation (Stage 6):** ESP32 firmware, LoRa driver, Raspberry Pi services.
 
 ---
 
@@ -236,15 +233,6 @@ The same pattern applies to `useGateways(false)` and `useAlerts(false)`.
 
 ---
 
-## Important Gaps (Known Before Stage 2)
-
-- **Geofence logic is entirely absent.** The frontend has no polygon geometry, no containment check, and no breach detection. This must be implemented in the ingestion layer and reflected in asset `status: "breach"` in Firebase.
-- **Reports are fully static.** The incident log is hardcoded. No Firebase path is read or written for reports.
-- **Alert acknowledgement is a no-op.** The Acknowledge button has no Firebase write.
-- **Heatmap and Floorplan views are stubs.** Only the "Map" tile layer is rendered.
-- **No route protection.** The `ProtectedLayout` does not redirect unauthenticated users to `/login`. Auth guard will need to be added before any production deployment.
-- **No geofence schema in Firebase.** This must be designed and agreed before Stage 3.
-- `recharts` is installed but unused. Reserved for future analytics/reporting charts.
 
 ## Stage 5: Docker Compose Integration
 
