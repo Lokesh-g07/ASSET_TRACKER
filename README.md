@@ -2,66 +2,39 @@
 
 A real-time IoT asset-tracking dashboard for monitoring physical assets across a campus environment. The system is designed to track BLE-tagged assets through a multi-layer IoT pipeline and surface live location, status, and alert data through a web dashboard.
 
+## Table of Contents
+- [Problem Statement](#problem-statement)
+- [Solution Overview](#solution-overview)
+- [Functional Capabilities](#functional-capabilities)
+- [System Architecture](#system-architecture)
+- [Technical Stack](#technical-stack)
+- [Quick Start](#quick-start)
+- [Failure & Edge Case Handling](#failure--edge-case-handling)
+- [Firebase RTDB & MQTT Examples](#firebase-rtdb--mqtt-examples)
+- [Test Suite](#test-suite)
+- [Configuration](#configuration)
+- [Project Structure](#project-structure)
+
 ---
 
-## What This Project Does
+## Problem Statement
 
 Campus Asset Tracker addresses the problem of physical asset loss, misuse, and unauthorised removal on large campuses. Each tracked asset carries a BLE beacon. A network of ESP32 gateways detects nearby beacons and forwards telemetry through LoRa to a central Raspberry Pi hub, which publishes data via MQTT to a FastAPI ingestion service. Firebase Realtime Database acts as the live data store, and a React web dashboard presents the data to administrators.
 
----
+## Solution Overview
 
-## Current Implementation Status
+The project is currently a complete, fully functional software-simulated IoT pipeline. A mathematical simulator generates realistic hardware telemetry, which flows through a containerized backend into a React dashboard.
 
-> **Stage 5 — Docker Integration Complete.**
->
-> The project currently contains:
-> 1. **React/Firebase Web Dashboard**
-> 2. **Python IoT Simulator** (Generates BLE/GPS telemetry with battery drain)
-> 3. **Mosquitto MQTT Broker** (Containerized)
-> 4. **FastAPI Hub** (Ingests MQTT telemetry and writes to Firebase)
->
-> The entire backend pipeline is containerized using Docker Compose. The hardware layer (ESP32, LoRa) and the physical Raspberry Pi deployment are pending Stage 6.
+| Stage   | Description                                          | Status      |
+|---------|------------------------------------------------------|-------------|
+| Stage 1 | React/Firebase dashboard — inspection & stabilisation | ✅ Complete |
+| Stage 2 | Python simulator producing simulated IoT telemetry    | ✅ Complete |
+| Stage 3 | Simulator → Mosquitto MQTT adapter                    | ✅ Complete |
+| Stage 4 | FastAPI ingestion service mapping MQTT to Firebase    | ✅ Complete |
+| Stage 5 | Local integration & Docker Compose stack             | ✅ Complete |
+| Stage 6 | Hardware layer (ESP32 BLE scanning, LoRa)             | 🔜 Planned  |
 
----
-
-## Architecture
-
-### Currently Implemented
-
-```
-React/Vite Dashboard  ──reads──  Firebase Realtime Database
-```
-
-The Firebase Realtime Database schema is defined and the hooks are wired to it behind a `useMock` flag. Switching `useMock` to `false` in any hook will make it read live data from Firebase.
-
-### Planned Full Architecture
-
-```
-BLE Asset Tags
-     │  (Bluetooth Low Energy advertisement)
-     ▼
-ESP32 Gateway (per zone)
-     │  (LoRa radio packet)
-     ▼
-Raspberry Pi Hub
-     │  (MQTT publish)
-     ▼
-MQTT Broker
-     │
-     ▼
-FastAPI Ingestion Service
-     │  (Firebase Admin SDK write)
-     ▼
-Firebase Realtime Database
-     │  (Firebase SDK onValue listener)
-     ▼
-React / Vite Dashboard  ──served to──  Browser
-```
-The entire ingestion pipeline (Simulator → MQTT → FastAPI Hub → Firebase) is fully implemented and containerized.
-
----
-
-## Current Features
+## Functional Capabilities
 
 | Feature           | Status              | Notes                                                               |
 |-------------------|---------------------|---------------------------------------------------------------------|
@@ -71,9 +44,31 @@ The entire ingestion pipeline (Simulator → MQTT → FastAPI Hub → Firebase) 
 | Gateway Health    | ✅ Fully implemented | Card grid with RSSI bars powered by the simulated backend.          |
 | Alerts            | ✅ Fully implemented | Alert list with severity icons dynamically mapped to Firebase.      |
 
----
+## System Architecture
 
-## Technology Stack (Current)
+```mermaid
+flowchart TD
+    subgraph Containerized Backend
+        Sim[Python IoT Simulator\nHaversine & Path-loss Models]
+        MQTT[Mosquitto Broker\nMQTT Protocol]
+        Hub[FastAPI Ingestion Hub\nPydantic Validation]
+    end
+    
+    subgraph Cloud
+        RTDB[(Firebase Realtime Database)]
+    end
+    
+    subgraph Client
+        React[React / Vite Dashboard]
+    end
+
+    Sim -- Publish `asset/+/telemetry` --> MQTT
+    MQTT -- Subscribe / QoS 1 --> Hub
+    Hub -- Deduplicate & Write via Admin SDK --> RTDB
+    RTDB -- SDK onValue Listener --> React
+```
+
+## Technical Stack
 
 | Layer         | Technology                                |
 |---------------|-------------------------------------------|
@@ -94,14 +89,44 @@ The entire ingestion pipeline (Simulator → MQTT → FastAPI Hub → Firebase) 
 
 **Pending Hardware Implementation (Stage 6):** ESP32 firmware, LoRa driver, Raspberry Pi services.
 
----
+## Quick Start
 
-## Firebase Realtime Database Schema
+### Prerequisites
+- [Docker](https://docs.docker.com/get-docker/) & Docker Compose
+- Node.js 18+ (for the React Dashboard)
 
-The frontend hooks expect the following schema. Future ingestion services must write data in this structure.
+### 1. Start the Backend Stack
+```bash
+docker compose up -d
+```
+Check health:
+```bash
+curl http://localhost:8000/health
+# Expected: {"status":"ok","mqtt":"connected","firebase":"initialized"}
+```
+
+### 2. Start the Frontend
+```bash
+npm install
+npm run dev
+# Opens at http://localhost:5173
+```
+*Note: Ensure `useMock=false` in the React hooks to consume live Firebase data.*
+
+## Failure & Edge Case Handling
+
+- **Idempotency & Deduplication:** MQTT QoS 1 guarantees "at least once" delivery, which can result in duplicate messages. The FastAPI Hub implements an in-memory LRU cache using a composite key (`assetId_timestamp`) to silently drop duplicate telemetry packets.
+- **Defensive Data Validation:** Incoming MQTT payloads are strictly validated using Pydantic schemas. Battery values mathematically bounded outside `0-100%` are rejected, protecting the Firebase RTDB from malformed hardware packets.
+- **Partial Database Updates:** The FastAPI Hub writes safely to Firebase using partial dictionary updates, ensuring manual UI metadata (like gateway zones) is preserved while IoT metrics (RSSI, battery) are seamlessly injected.
+
+## Firebase RTDB & MQTT Examples
+
+**MQTT Telemetry Topic:** `asset/{assetId}/telemetry`
+
+**Firebase Realtime Database Schema:**
+The frontend hooks expect the following schema. 
 
 ### `/assets/{assetId}`
-
 ```json
 {
   "name":     "Laptop #L-22",
@@ -113,11 +138,9 @@ The frontend hooks expect the following schema. Future ingestion services must w
   "lng":      76.9558
 }
 ```
-
 **Valid `status` values:** `online` | `alert` | `breach` | `idle`
 
 ### `/gateways/{gatewayId}`
-
 ```json
 {
   "name":     "GW-01 Eng. Block",
@@ -127,53 +150,30 @@ The frontend hooks expect the following schema. Future ingestion services must w
   "zone":     "Eng Block"
 }
 ```
-
 **Valid `status` values:** `online` | `warning` | `offline`
 
-### `/alerts/{alertId}`
+## Test Suite
 
-```json
-{
-  "type":         "critical",
-  "title":        "Asset left campus",
-  "detail":       "MacBook #MB-04 · Admin gate",
-  "time":         "2m ago",
-  "acknowledged": false
-}
-```
-
-**Valid `type` values:** `critical` | `warning` | `info`
-
-Only alerts where `acknowledged === false` are shown in the dashboard.
-
-### `/geofences` (schema not yet wired to Firebase)
-
-Geofences are currently hardcoded static data inside `Geofences.jsx`. No Firebase path is consumed. The expected future schema is TBD.
-
----
-
-## Running Locally
-
-### Prerequisites
-
-- Node.js 18+
-- A Firebase project with **Email/Password Authentication** and **Realtime Database** enabled
-
-### Setup
-
+You can run the unit tests inside the pristine container environments via Docker Compose:
 ```bash
-# 1. Install dependencies
-npm install
-
-# 2. Create your environment file
-cp .env .env.local
-# Then edit .env.local with your real Firebase credentials
+docker compose run --rm hub pytest tests/
+docker compose run --rm simulator pytest tests/
 ```
 
-### Environment Variables
+## Configuration
 
-Create `.env.local` (never commit this file — it is in `.gitignore` via `*.local`):
+### Firebase Credential Setup (Backend)
+1. Download your Firebase Service Account JSON file.
+2. Save it as `firebase-adminsdk.json` in the `secrets/` directory:
+   ```text
+   ASSET_TRACKER/
+   └── secrets/
+       └── firebase-adminsdk.json
+   ```
+*(Note: `secrets/` is ignored by Git, so your credentials remain safe).*
 
+### Environment Variables (Frontend)
+Create `.env.local` in the root (ignored by Git):
 ```env
 VITE_FIREBASE_API_KEY=your_api_key
 VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
@@ -184,116 +184,31 @@ VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 VITE_FIREBASE_APP_ID=your_app_id
 ```
 
-### Development Server
+## Project Structure
 
-```bash
-npm run dev
-# Opens at http://localhost:5173
-```
-
-### Production Build
-
-```bash
-npm run build
-# Output in dist/
-```
-
-### Lint
-
-```bash
-npm run lint
-```
-
----
-
-## Switching from Mock to Live Firebase Data
-
-Each hook has a `useMock` parameter (default `true`). To connect a hook to Firebase:
-
-```js
-// In the relevant page, change:
-const { assets } = useAssets()        // → uses mock data
-const { assets } = useAssets(false)   // → reads from Firebase /assets
-```
-
-The same pattern applies to `useGateways(false)` and `useAlerts(false)`.
-
----
-
-## Project Status
-
-| Stage   | Description                                          | Status      |
-|---------|------------------------------------------------------|-------------|
-| Stage 1 | React/Firebase dashboard — inspection & stabilisation | ✅ Complete |
-| Stage 2 | Python simulator producing simulated IoT telemetry    | ✅ Complete |
-| Stage 3 | Simulator → Mosquitto MQTT adapter                    | ✅ Complete |
-| Stage 4 | FastAPI ingestion service mapping MQTT to Firebase    | ✅ Complete |
-| Stage 5 | Local integration & Docker Compose stack             | ✅ Complete |
-| Stage 6 | Hardware layer (ESP32 BLE scanning, LoRa)             | 🔜 Planned  |
-
----
-
-
-## Stage 5: Docker Compose Integration
-
-The full backend architecture (Simulator + Mosquitto + FastAPI Hub) is containerized via Docker Compose.
-
-### Prerequisites
-- [Docker](https://docs.docker.com/get-docker/) & Docker Compose
-- Node.js (for the React Dashboard)
-
-### Firebase Credential Setup
-1. Download your Firebase Service Account JSON file.
-2. Save it as `firebase-adminsdk.json` in the `secrets/` directory:
-   ```text
-   ASSET_TRACKER/
-   └── secrets/
-       └── firebase-adminsdk.json
-   ```
-*(Note: `secrets/` is ignored by Git, so your credentials remain safe).*
-
-### Environment Variables
-A `.env` file in the root can override defaults if needed:
-- `VITE_FIREBASE_DATABASE_URL=https://your-project-default-rtdb.firebaseio.com`
-
-### Running the Stack
-Start the backend services:
-```bash
-docker compose up -d
-```
-
-### Checking Hub Health
-```bash
-curl http://localhost:8000/health
-# Expected: {"status":"ok","mqtt":"connected","firebase":"initialized"}
-```
-
-### Viewing Logs & MQTT Messages
-View logs of all services:
-```bash
-docker compose logs -f
-```
-To observe live MQTT telemetry:
-```bash
-docker compose exec mosquitto mosquitto_sub -t "asset/+/telemetry" -v
-```
-
-### Running the React Dashboard
-The frontend remains running on the host machine:
-```bash
-npm install
-npm run dev
-```
-Navigate to `http://localhost:5173`. Ensure `useMock=false` in the React hooks to consume live Firebase data.
-
-### Running Container Tests
-You can run the unit tests inside the pristine container environments:
-```bash
-docker compose run --rm hub pytest tests/
-docker compose run --rm simulator pytest tests/
-```
-
-### Stopping the Stack
-```bash
-docker compose down
+```text
+ASSET_TRACKER/
+├── docker-compose.yml       # Orchestrates Mosquitto, Hub, and Simulator
+├── package.json             # React Dashboard dependencies
+├── src/                     # React Frontend Source
+│   ├── components/
+│   ├── hooks/
+│   ├── pages/
+│   └── lib/
+├── hub/                     # FastAPI Ingestion Service
+│   ├── main.py
+│   ├── processor.py
+│   ├── mqtt_handler.py
+│   ├── firebase_client.py
+│   ├── Dockerfile
+│   └── tests/
+├── simulator/               # Python IoT Telemetry Generator
+│   ├── main.py
+│   ├── movement.py
+│   ├── ble.py
+│   ├── Dockerfile
+│   └── tests/
+├── docker/                  # External Service Configs
+│   └── mosquitto/
+└── secrets/                 # Ignored Firebase credentials directory
 ```
